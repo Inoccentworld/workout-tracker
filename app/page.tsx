@@ -5,25 +5,66 @@ import { Plus, Calendar, TrendingUp, Dumbbell, Download, BarChart3, RefreshCw, U
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from '@/lib/supabase';
 
+// === 型定義 ==============================
+type RawRecord = {
+  id: string | number;
+  date: string;
+  weight: number;
+  exercise: string;
+  load: number;
+  reps: number;
+  sets: number;
+  comment: string;
+};
+
+type VolumeData = {
+  id: string | number;
+  date: string;
+  weight: number;
+  exercise: string;
+  volume: number;
+};
+
+type SetForm = {
+  load: string;
+  reps: string;
+};
+
+type FormData = {
+  date: string;
+  weight: string;
+  exercise: string;
+  comment: string;
+  sets: SetForm[];
+};
+
+type EditFormData = {
+  date: string;
+  weight: string;
+  exercise: string;
+  load: string;
+  reps: string;
+  sets: string;
+  comment: string;
+};
+// ========================================
+
 const WorkoutTracker = () => {
-  const [rawRecords, setRawRecords] = useState([]);
-  const [volumeData, setVolumeData] = useState([]);
-  const [formData, setFormData] = useState({
+  const [rawRecords, setRawRecords] = useState<RawRecord[]>([]);
+  const [volumeData, setVolumeData] = useState<VolumeData[]>([]);
+  const [formData, setFormData] = useState<FormData>({
     date: '',
     weight: '',
     exercise: '',
     comment: '',
-    sets: [{
-      load: '',
-      reps: ''
-    }]
+    sets: [{ load: '', reps: '' }]
   });
-  const [view, setView] = useState('input');
-  const [selectedExerciseForGraph, setSelectedExerciseForGraph] = useState('');
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState(null);
-  const [editFormData, setEditFormData] = useState({
+  const [view, setView] = useState<'input' | 'raw' | 'volume' | 'graph' | 'stats' | 'import'>('input');
+  const [selectedExerciseForGraph, setSelectedExerciseForGraph] = useState<string>('');
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [editingId, setEditingId] = useState<string | number | null>(null);
+  const [editFormData, setEditFormData] = useState<EditFormData>({
     date: '',
     weight: '',
     exercise: '',
@@ -36,22 +77,20 @@ const WorkoutTracker = () => {
   const KG_TO_LB = 2.20462;
 
   // Supabaseからデータを読み込む
-  const loadData = async () => {
+  const loadData = async (): Promise<void> => {
     try {
       setLoading(true);
-      
-      // 生データを取得
+
       const { data: rawData, error: rawError } = await supabase
         .from('workout_raw_records')
         .select('*')
-        .order('created_at', { ascending: true });
-      
+        .order('created_at' as any, { ascending: true });
+
       if (rawError) {
         console.error('Raw data error:', rawError);
         setRawRecords([]);
-      } else {
-        // データ形式を調整
-        const formattedRawData = rawData.map(record => ({
+      } else if (rawData) {
+        const formattedRawData: RawRecord[] = rawData.map((record: any) => ({
           id: record.id,
           date: record.date,
           weight: record.weight,
@@ -63,27 +102,25 @@ const WorkoutTracker = () => {
         }));
         setRawRecords(formattedRawData);
       }
-      
-      // 総挙上重量データを取得
+
       const { data: volumeDataFromDB, error: volumeError } = await supabase
         .from('workout_volume_data')
         .select('*')
-        .order('created_at', { ascending: true });
-      
+        .order('created_at' as any, { ascending: true });
+
       if (volumeError) {
         console.error('Volume data error:', volumeError);
         setVolumeData([]);
-      } else {
-        const formattedVolumeData = volumeDataFromDB.map(record => ({
+      } else if (volumeDataFromDB) {
+        const formattedVolumeData: VolumeData[] = volumeDataFromDB.map((record: any) => ({
           id: record.id,
           date: record.workout_date,
-          weight: 0, // 体重情報がない場合のデフォルト
+          weight: 0,
           exercise: record.exercise_name,
           volume: record.total_volume
         }));
         setVolumeData(formattedVolumeData);
       }
-      
     } catch (error) {
       console.error('データの読み込みに失敗しました:', error);
       setRawRecords([]);
@@ -98,12 +135,12 @@ const WorkoutTracker = () => {
     setCurrentDateTime();
   }, []);
 
-  const getUniqueExercises = () => {
+  const getUniqueExercises = (): string[] => {
     const exercises = new Set(rawRecords.map(r => r.exercise));
     return Array.from(exercises).sort();
   };
 
-  const setCurrentDateTime = () => {
+  const setCurrentDateTime = (): void => {
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -111,16 +148,14 @@ const WorkoutTracker = () => {
     setFormData(prev => ({ ...prev, date: `${year}/${month}/${day}` }));
   };
 
-  // セットを追加
-  const addSet = () => {
+  const addSet = (): void => {
     setFormData(prev => ({
       ...prev,
       sets: [...prev.sets, { load: '', reps: '' }]
     }));
   };
 
-  // セットを削除
-  const removeSet = (index) => {
+  const removeSet = (index: number): void => {
     if (formData.sets.length > 1) {
       setFormData(prev => ({
         ...prev,
@@ -129,18 +164,16 @@ const WorkoutTracker = () => {
     }
   };
 
-  // セットの値を更新
-  const updateSet = (index, field, value) => {
+  const updateSet = (index: number, field: string, value: string): void => {
     setFormData(prev => ({
       ...prev,
-      sets: prev.sets.map((set, i) => 
+      sets: prev.sets.map((set, i) =>
         i === index ? { ...set, [field]: value } : set
       )
     }));
   };
 
-  // 記録を削除
-  const deleteRecord = async (id) => {
+  const deleteRecord = async (id: string | number): Promise<void> => {
     if (!confirm('この記録を削除しますか？この操作は元に戻せません。')) {
       return;
     }
@@ -152,8 +185,6 @@ const WorkoutTracker = () => {
         .eq('id', id);
 
       if (error) throw error;
-
-      // ローカル状態から削除
       setRawRecords(prev => prev.filter(record => record.id !== id));
       alert('記録を削除しました');
     } catch (error) {
@@ -162,22 +193,20 @@ const WorkoutTracker = () => {
     }
   };
 
-  // 編集開始
-  const startEdit = (record) => {
+  const startEdit = (record: RawRecord): void => {
     setEditingId(record.id);
     setEditFormData({
       date: record.date,
-      weight: record.weight,
+      weight: record.weight.toString(),
       exercise: record.exercise,
-      load: record.load,
-      reps: record.reps,
-      sets: record.sets,
+      load: record.load.toString(),
+      reps: record.reps.toString(),
+      sets: record.sets.toString(),
       comment: record.comment
     });
   };
 
-  // 編集キャンセル
-  const cancelEdit = () => {
+  const cancelEdit = (): void => {
     setEditingId(null);
     setEditFormData({
       date: '',
@@ -190,8 +219,7 @@ const WorkoutTracker = () => {
     });
   };
 
-  // 編集保存
-  const saveEdit = async () => {
+  const saveEdit = async (): Promise<void> => {
     try {
       const { error } = await supabase
         .from('workout_raw_records')
@@ -208,24 +236,22 @@ const WorkoutTracker = () => {
 
       if (error) throw error;
 
-      // ローカル状態を更新
-      setRawRecords(prev => prev.map(record => 
-        record.id === editingId 
-          ? { ...record, ...editFormData, weight: parseFloat(editFormData.weight), load: parseFloat(editFormData.load), reps: parseInt(editFormData.reps), sets: parseInt(editFormData.sets) }
-          : record
-      ));
+      setRawRecords(prev =>
+        prev.map(record =>
+          record.id === editingId
+            ? {
+                ...record,
+                ...editFormData,
+                weight: parseFloat(editFormData.weight),
+                load: parseFloat(editFormData.load),
+                reps: parseInt(editFormData.reps),
+                sets: parseInt(editFormData.sets)
+              }
+            : record
+        )
+      );
 
-      setEditingId(null);
-      setEditFormData({
-        date: '',
-        weight: '',
-        exercise: '',
-        load: '',
-        reps: '',
-        sets: '',
-        comment: ''
-      });
-
+      cancelEdit();
       alert('記録を更新しました');
     } catch (error) {
       console.error('更新エラー:', error);
@@ -233,25 +259,24 @@ const WorkoutTracker = () => {
     }
   };
 
-  // CSVファイルからデータをインポート
-  const importCSVData = async (event) => {
-    const file = event.target.files[0];
+  const importCSVData = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
     if (!confirm(`CSVファイル "${file.name}" からデータをインポートしますか？`)) {
-      event.target.value = ''; // ファイル選択をリセット
+      event.target.value = '';
       return;
     }
 
     try {
       const text = await file.text();
       const lines = text.trim().split('\n');
-      const records = [];
+      const records: RawRecord[] = [];
 
-      // ヘッダー行をスキップして処理
       for (let i = 1; i < lines.length; i++) {
         const [date, weight, exercise, load, reps, sets, comment] = lines[i].split(',');
         records.push({
+          id: i,
           date,
           weight: parseFloat(weight),
           exercise,
@@ -262,23 +287,20 @@ const WorkoutTracker = () => {
         });
       }
 
-      const { error } = await supabase
-        .from('workout_raw_records')
-        .insert(records);
-
+      const { error } = await supabase.from('workout_raw_records').insert(records);
       if (error) throw error;
-      
+
       alert(`${records.length}件のデータをインポートしました！`);
       await loadData();
-      event.target.value = ''; // ファイル選択をリセット
+      event.target.value = '';
     } catch (error) {
       console.error('インポートエラー:', error);
       alert('インポートに失敗しました');
-      event.target.value = ''; // ファイル選択をリセット
+      event.target.value = '';
     }
   };
 
-  const handleRefresh = async () => {
+  const handleRefresh = async (): Promise<void> => {
     setIsRefreshing(true);
     try {
       await loadData();
@@ -291,10 +313,10 @@ const WorkoutTracker = () => {
     }
   };
 
-  const calculateVolume = (record) => {
+  const calculateVolume = (record: RawRecord): number => {
     const { weight, exercise, load, reps, sets } = record;
     const weightLb = weight * KG_TO_LB;
-    
+
     if (exercise === '懸垂') {
       return (weightLb + load) * reps * sets;
     } else if (exercise.includes('アブローラー(膝コロ)')) {
@@ -310,40 +332,32 @@ const WorkoutTracker = () => {
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (): Promise<void> => {
     if (!formData.date || !formData.exercise || formData.sets.some(set => !set.load || !set.reps)) {
       alert('必須項目を入力してください');
       return;
     }
-    
+
     try {
-      const records = [];
-      
-      // 各セットごとに個別のレコードを作成
+      const records: Omit<RawRecord, 'id'>[] = [];
       formData.sets.forEach(set => {
         if (set.load && set.reps) {
           records.push({
-            exercise: formData.exercise,
+            date: formData.date.replace(/\//g, '-'),
             weight: parseFloat(formData.weight) || 60,
+            exercise: formData.exercise,
             load: parseFloat(set.load),
             reps: parseInt(set.reps),
-            sets: 1, // 各セットは1として記録
-            date: formData.date.replace(/\//g, '-'),
+            sets: 1,
             comment: formData.comment
           });
         }
       });
 
-      // Supabaseに一括保存
-      const { data, error } = await supabase
-        .from('workout_raw_records')
-        .insert(records)
-        .select();
-
+      const { data, error } = await supabase.from('workout_raw_records').insert(records).select();
       if (error) throw error;
 
-      // ローカル状態を更新
-      const addedRecords = data.map(record => ({
+      const addedRecords: RawRecord[] = (data as any[]).map(record => ({
         id: record.id,
         date: record.date,
         weight: record.weight,
@@ -353,10 +367,8 @@ const WorkoutTracker = () => {
         sets: record.sets,
         comment: record.comment
       }));
-      
-      setRawRecords(prev => [...prev, ...addedRecords]);
 
-      // フォームをリセット
+      setRawRecords(prev => [...prev, ...addedRecords]);
       setFormData({
         date: formData.date,
         weight: formData.weight,
@@ -372,41 +384,76 @@ const WorkoutTracker = () => {
     }
   };
 
-  // 総挙上重量を日付・種目でまとめる
-  const getAggregatedVolumeData = () => {
-    const aggregated = {};
-    
+  const getAggregatedVolumeData = (): { date: string; exercise: string; totalVolume: number; details: any[] }[] => {
+    const aggregated: Record<string, { date: string; exercise: string; totalVolume: number; details: any[] }> = {};
+
     rawRecords.forEach(record => {
       const key = `${record.date}_${record.exercise}`;
-      
       if (!aggregated[key]) {
-        aggregated[key] = {
-          date: record.date,
-          exercise: record.exercise,
-          totalVolume: 0,
-          details: []
-        };
+        aggregated[key] = { date: record.date, exercise: record.exercise, totalVolume: 0, details: [] };
       }
-      
+
       const volume = calculateVolume(record);
       aggregated[key].totalVolume += volume;
-      aggregated[key].details.push({
-        load: record.load,
-        reps: record.reps,
-        sets: record.sets,
-        volume: volume
-      });
+      aggregated[key].details.push({ load: record.load, reps: record.reps, sets: record.sets, volume });
     });
-    
+
     return Object.values(aggregated).sort((a, b) => b.date.localeCompare(a.date));
   };
 
-  const exportRawToCSV = () => {
+  const getExerciseStats = (): {
+    exercise: string;
+    lastDate: string;
+    maxDailyVolume: number;
+    maxWeight: number;
+    workoutDays: number;
+  }[] => {
+    const statsMap: Record<string, {
+      exercise: string;
+      lastDate: string;
+      maxDailyVolume: number;
+      maxWeight: number;
+      workoutDays: number;
+    }> = {};
+
+    const aggregated = getAggregatedVolumeData();
+
+    aggregated.forEach((entry) => {
+      const { exercise, date, totalVolume } = entry;
+      if (!statsMap[exercise]) {
+        statsMap[exercise] = {
+          exercise,
+          lastDate: date,
+          maxDailyVolume: totalVolume,
+          maxWeight: 0,
+          workoutDays: 1
+        };
+      } else {
+        const stat = statsMap[exercise];
+        stat.workoutDays += 1;
+        if (date > stat.lastDate) stat.lastDate = date;
+        if (totalVolume > stat.maxDailyVolume) stat.maxDailyVolume = totalVolume;
+      }
+    });
+
+    rawRecords.forEach((r) => {
+      if (!statsMap[r.exercise]) return;
+      if (r.load > statsMap[r.exercise].maxWeight) {
+        statsMap[r.exercise].maxWeight = r.load;
+      }
+    });
+
+    return Object.values(statsMap).sort((a, b) =>
+      a.exercise.localeCompare(b.exercise, 'ja')
+    );
+  };
+
+  const exportRawToCSV = (): void => {
     const headers = '日付,体重(kg),種目,重量(lb),回数,セット数,コメント\n';
-    const csv = headers + rawRecords.map(r => 
+    const csv = headers + rawRecords.map(r =>
       `${r.date},${r.weight},${r.exercise},${r.load},${r.reps},${r.sets},${r.comment}`
     ).join('\n');
-    
+
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -414,13 +461,13 @@ const WorkoutTracker = () => {
     link.click();
   };
 
-  const exportVolumeToCSV = () => {
+  const exportVolumeToCSV = (): void => {
     const aggregatedData = getAggregatedVolumeData();
     const headers = '日付,種目,総挙上重量(lb)\n';
-    const csv = headers + aggregatedData.map(v => 
+    const csv = headers + aggregatedData.map(v =>
       `${v.date},${v.exercise},${v.totalVolume.toFixed(1)}`
     ).join('\n');
-    
+
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -428,82 +475,24 @@ const WorkoutTracker = () => {
     link.click();
   };
 
-  // 改良された種目別統計
-  const getExerciseStats = () => {
-    const exerciseMap = {};
-    
-    // 生データから統計を計算
-    rawRecords.forEach(record => {
-      if (!exerciseMap[record.exercise]) {
-        exerciseMap[record.exercise] = {
-          dates: new Set(),
-          dailyVolumes: {},
-          maxWeight: 0,
-          allRecords: []
-        };
-      }
-      
-      const volume = calculateVolume(record);
-      exerciseMap[record.exercise].dates.add(record.date);
-      exerciseMap[record.exercise].allRecords.push(record);
-      
-      // 1日あたりの総挙上重量を計算
-      if (!exerciseMap[record.exercise].dailyVolumes[record.date]) {
-        exerciseMap[record.exercise].dailyVolumes[record.date] = 0;
-      }
-      exerciseMap[record.exercise].dailyVolumes[record.date] += volume;
-      
-      // 最高重量を記録
-      if (record.load > exerciseMap[record.exercise].maxWeight) {
-        exerciseMap[record.exercise].maxWeight = record.load;
-      }
-    });
-    
-    return Object.entries(exerciseMap).map(([exercise, data]) => {
-      const sortedDates = Array.from(data.dates).sort();
-      const dailyVolumeValues = Object.values(data.dailyVolumes);
-      
-      return {
-        exercise,
-        lastDate: sortedDates[sortedDates.length - 1] || '', // 最後に行った日
-        maxDailyVolume: Math.max(...dailyVolumeValues), // 1日あたりの合計挙上重量の最高記録
-        maxWeight: data.maxWeight, // 最高重量
-        workoutDays: data.dates.size // 実施日数（その種目を行った日の合計）
-      };
-    }).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
-  };
+  const getGraphDataForExercise = (exercise: string): { date: string; volume: number; maxLoad: number }[] => {
+    const dateMap: Record<string, { date: string; volume: number; maxLoad: number }> = {};
 
-  const getGraphDataForExercise = (exercise) => {
-    const dateMap = {};
-    
-    rawRecords
-      .filter(r => r.exercise === exercise)
-      .forEach(r => {
-        if (!dateMap[r.date]) {
-          dateMap[r.date] = { date: r.date, volume: 0, maxLoad: 0 };
-        }
-        
-        const volume = calculateVolume(r);
-        dateMap[r.date].volume += volume;
-        
-        if (r.load > dateMap[r.date].maxLoad) {
-          dateMap[r.date].maxLoad = r.load;
-        }
-      });
+    rawRecords.filter(r => r.exercise === exercise).forEach(r => {
+      if (!dateMap[r.date]) {
+        dateMap[r.date] = { date: r.date, volume: 0, maxLoad: 0 };
+      }
+      const volume = calculateVolume(r);
+      dateMap[r.date].volume += volume;
+      if (r.load > dateMap[r.date].maxLoad) dateMap[r.date].maxLoad = r.load;
+    });
 
     return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
   };
 
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen flex items-center justify-center">
-        <div className="text-xl text-gray-600">データを読み込み中...</div>
-      </div>
-    );
-  }
-
+  // === JSX部分（省略せず完全版） ===
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
+     <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
       <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
         <div className="flex justify-between items-center">
           <div>
@@ -704,7 +693,7 @@ const WorkoutTracker = () => {
                 onChange={(e) => setFormData({...formData, comment: e.target.value})}
                 placeholder="次回の目標やメモ"
                 className="w-full px-3 py-2 border rounded-lg"
-                rows="2"
+                rows={2}
               />
             </div>
 
