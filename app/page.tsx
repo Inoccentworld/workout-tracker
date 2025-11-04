@@ -51,6 +51,9 @@ type EditFormData = {
 // ========================================
 
 const WorkoutTracker = () => {
+  // === カスタムツールチップ ===
+  
+
   const [rawRecords, setRawRecords] = useState<RawRecord[]>([]);
   const [volumeData, setVolumeData] = useState<VolumeData[]>([]);
   const [formData, setFormData] = useState<FormData>({
@@ -74,7 +77,34 @@ const WorkoutTracker = () => {
     sets: '',
     comment: ''
   });
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const date = label;
+      const records = rawRecords.filter(
+        (r) => r.date === date && r.exercise === selectedExerciseForGraph
+      );
+      const details = records.map(
+        (r, i) => `${r.load}lb × ${r.reps}回 × ${r.sets}セット`
+      );
 
+      return (
+        <div className="bg-white border p-2 rounded shadow text-sm">
+          <p className="font-semibold">{date}</p>
+          <p>総挙上重量: {payload[0]?.value?.toFixed?.(1)} lb</p>
+          <p>最大負荷: {payload[1]?.value} lb</p>
+          {details.length > 0 && (
+            <div className="mt-1">
+              <p className="font-semibold text-gray-700">セット内訳:</p>
+              {details.map((d, i) => (
+                <p key={i} className="text-gray-600">{d}</p>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+    return null;
+  };
   const KG_TO_LB = 2.20462;
 
   // Supabaseからデータを読み込む
@@ -293,25 +323,159 @@ const WorkoutTracker = () => {
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-bold mb-4">新規記録（複数セット対応）</h2>
           <div className="space-y-4">
+
+            {/* 日付・体重 */}
             <div className="grid grid-cols-2 gap-4">
-              <input type="text" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} className="border rounded-lg p-2" />
-              <input type="number" step="0.1" value={formData.weight} onChange={e => setFormData({ ...formData, weight: e.target.value })} placeholder="体重(kg)" className="border rounded-lg p-2" />
+              <input
+                type="text"
+                value={formData.date}
+                onChange={e => setFormData({ ...formData, date: e.target.value })}
+                className="border rounded-lg p-2"
+              />
+              <input
+                type="number"
+                step="0.1"
+                value={formData.weight}
+                onChange={e => setFormData({ ...formData, weight: e.target.value })}
+                placeholder="体重(kg)"
+                className="border rounded-lg p-2"
+              />
             </div>
-            <input type="text" value={formData.exercise} onChange={e => setFormData({ ...formData, exercise: e.target.value })} placeholder="種目" className="border rounded-lg p-2 w-full" />
+
+            {/* ✅ 種目選択＋手入力対応 */}
+            <div>
+              <select
+                value={formData.exercise || ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  if (val === 'custom') {
+                    setFormData({ ...formData, exercise: '' });
+                  } else {
+                    setFormData({ ...formData, exercise: val });
+                  }
+                }}
+                className="border rounded-lg p-2 w-full"
+              >
+                <option value="">種目を選択</option>
+                {getUniqueExercises().map((ex, i) => (
+                  <option key={i} value={ex}>{ex}</option>
+                ))}
+                <option value="custom">＋ 新しく記入する</option>
+              </select>
+
+              {/* 新規種目記入欄 */}
+              {formData.exercise === '' && (
+                <input
+                  type="text"
+                  placeholder="種目名を入力"
+                  value={formData.exercise}
+                  onChange={e => setFormData({ ...formData, exercise: e.target.value })}
+                  className="border rounded-lg p-2 w-full mt-2"
+                />
+              )}
+
+              {/* ✅ 選択中の過去統計表示 */}
+              {formData.exercise && (() => {
+                const filtered = rawRecords.filter(r => r.exercise === formData.exercise);
+                if (filtered.length === 0) return null;
+                const maxLoad = Math.max(...filtered.map(r => r.load));
+                const maxVolume = Math.max(
+                  ...Object.values(
+                    filtered.reduce((acc, r) => {
+                      acc[r.date] = (acc[r.date] || 0) + calculateVolume(r);
+                      return acc;
+                    }, {} as Record<string, number>)
+                  )
+                );
+                return (
+                  <div className="mt-2 text-sm text-gray-700 bg-gray-50 p-2 rounded-lg border">
+                    <p>🔹これまでの最高総挙上重量: <span className="font-semibold">{maxVolume.toFixed(1)} lb</span></p>
+                    <p>🔹これまでの最高負荷(1セットあたり): <span className="font-semibold">{maxLoad} lb</span></p>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* ✅ セット入力欄 */}
             {formData.details.map((d, i) => (
               <div key={i} className="flex gap-2 items-center">
-                <input type="number" value={d.load} onChange={e => updateDetail(i, 'load', e.target.value)} placeholder="重量(lb)" className="border rounded-lg p-2 w-1/3" />
-                <input type="number" value={d.reps} onChange={e => updateDetail(i, 'reps', e.target.value)} placeholder="回数" className="border rounded-lg p-2 w-1/3" />
-                <input type="number" value={d.sets} onChange={e => updateDetail(i, 'sets', e.target.value)} placeholder="セット" className="border rounded-lg p-2 w-1/3" />
-                {formData.details.length > 1 && <button onClick={() => removeDetail(i)} className="text-red-600"><Minus /></button>}
+                <input
+                  type="number"
+                  value={d.load}
+                  onChange={e => updateDetail(i, 'load', e.target.value)}
+                  placeholder="重量(lb)"
+                  className="border rounded-lg p-2 w-1/3"
+                />
+                <input
+                  type="number"
+                  value={d.reps}
+                  onChange={e => updateDetail(i, 'reps', e.target.value)}
+                  placeholder="回数"
+                  className="border rounded-lg p-2 w-1/3"
+                />
+                <input
+                  type="number"
+                  value={d.sets}
+                  step="1"
+                  min="1"
+                  onChange={e => updateDetail(i, 'sets', e.target.value)}
+                  placeholder="セット"
+                  className="border rounded-lg p-2 w-1/3"
+                />
+                {formData.details.length > 1 && (
+                  <button onClick={() => removeDetail(i)} className="text-red-600">
+                    <Minus />
+                  </button>
+                )}
               </div>
             ))}
-            <button onClick={addDetail} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"><Plus size={16}/>セット追加</button>
-            <textarea value={formData.comment} onChange={e => setFormData({ ...formData, comment: e.target.value })} placeholder="メモ" rows={2} className="border rounded-lg p-2 w-full" />
-            <button onClick={handleSubmit} className="bg-blue-600 text-white w-full py-3 rounded-lg hover:bg-blue-700">記録を追加</button>
+
+            {/* ✅ リアルタイム総挙上重量表示 */}
+            {formData.exercise && (
+              <div className="text-sm bg-blue-50 border rounded-lg p-2">
+                {(() => {
+                  const tempRecords: RawRecord[] = formData.details.map((d, i) => ({
+                    id: i,
+                    date: formData.date,
+                    weight: parseFloat(formData.weight) || 60,
+                    exercise: formData.exercise,
+                    load: parseFloat(d.load) || 0,
+                    reps: parseInt(d.reps) || 0,
+                    sets: parseInt(d.sets) || 0,
+                    comment: ''
+                  }));
+                  const totalVolume = tempRecords.reduce((sum, r) => sum + calculateVolume(r), 0);
+                  return <p>💪 この記録の総挙上重量: <span className="font-semibold">{totalVolume.toFixed(1)} lb</span></p>;
+                })()}
+              </div>
+            )}
+
+            <button
+              onClick={addDetail}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2"
+            >
+              <Plus size={16} /> セット追加
+            </button>
+
+            <textarea
+              value={formData.comment}
+              onChange={e => setFormData({ ...formData, comment: e.target.value })}
+              placeholder="メモ"
+              rows={2}
+              className="border rounded-lg p-2 w-full"
+            />
+
+            <button
+              onClick={handleSubmit}
+              className="bg-blue-600 text-white w-full py-3 rounded-lg hover:bg-blue-700"
+            >
+              記録を追加
+            </button>
           </div>
         </div>
       )}
+
+
 
       {/* 生データ */}
         {view === 'raw' && (
@@ -458,24 +622,60 @@ const WorkoutTracker = () => {
       {view === 'graph' && (
         <div className="bg-white rounded-lg shadow p-6">
           <h2 className="text-xl font-bold mb-4">推移グラフ</h2>
-          <select value={selectedExerciseForGraph} onChange={e => setSelectedExerciseForGraph(e.target.value)} className="border p-2 rounded-lg mb-4">
+
+          {/* 種目選択 */}
+          <select
+            value={selectedExerciseForGraph}
+            onChange={(e) => setSelectedExerciseForGraph(e.target.value)}
+            className="border p-2 rounded-lg mb-4"
+          >
             <option value="">種目を選択</option>
-            {getUniqueExercises().map((ex, i) => <option key={i} value={ex}>{ex}</option>)}
+            {getUniqueExercises().map((ex, i) => (
+              <option key={i} value={ex}>{ex}</option>
+            ))}
           </select>
+
+          {/* グラフ描画 */}
           {selectedExerciseForGraph && (
             <ResponsiveContainer width="100%" height={400}>
               <LineChart data={getGraphDataForExercise(selectedExerciseForGraph)}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip /><Legend />
-                <Line type="monotone" dataKey="volume" stroke="#2563eb" name="総挙上重量" />
-                <Line type="monotone" dataKey="maxLoad" stroke="#dc2626" name="最大重量" />
+
+                {/* ✅ 左軸：総挙上重量 */}
+                <YAxis yAxisId="left" orientation="left" />
+
+                {/* ✅ 右軸：最大負荷 */}
+                <YAxis yAxisId="right" orientation="right" />
+
+                {/* ✅ カスタムツールチップ */}
+                <Tooltip content={<CustomTooltip />} />
+
+                <Legend />
+
+                {/* 総挙上重量線 */}
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="volume"
+                  stroke="#2563eb"
+                  name="総挙上重量(lb)"
+                />
+
+                {/* 最大負荷線 */}
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="maxLoad"
+                  stroke="#dc2626"
+                  name="最大負荷(lb)"
+                />
               </LineChart>
             </ResponsiveContainer>
           )}
         </div>
       )}
+
 
       {/* 統計 */}
       {view === 'stats' && (
