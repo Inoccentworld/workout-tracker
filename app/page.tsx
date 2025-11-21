@@ -107,6 +107,15 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   };
   const KG_TO_LB = 2.20462;
 
+    // 日付を YYYY-MM-DD に正規化（比較・ソート用）
+    const toIso = (d: string): string => {
+      const s = d.replace(/\./g, '-').replace(/\//g, '-').trim();
+      const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (!m) return s; // 期待外フォーマットはそのまま返す（最悪でも元文字列）
+      const [, y, mo, da] = m;
+      return `${y}-${mo.padStart(2, '0')}-${da.padStart(2, '0')}`;
+    };
+
   // Supabaseからデータを読み込む
   const loadData = async (): Promise<void> => {
     try {
@@ -145,6 +154,29 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         volume: record.total_volume
       }));
       setVolumeData(formattedVolumeData);
+      // 🔽 生データから統一された総挙上重量テーブルを再構築（ISO日付でキー＆表示）
+      const aggregated: Record<string, VolumeData> = {};
+
+      formattedRawData.forEach((r) => {
+        const isoDate = toIso(r.date);
+        const key = `${isoDate}_${r.exercise}`;
+        const vol = calculateVolume(r);
+        if (!aggregated[key]) {
+          aggregated[key] = {
+            id: key,
+            date: isoDate,       // 以後は ISO で統一
+            weight: r.weight,
+            exercise: r.exercise,
+            volume: 0
+          };
+        }
+        aggregated[key].volume += vol;
+      });
+
+      // DB由来の volumeData ではなく、生データ集計で上書き
+      setVolumeData(Object.values(aggregated));
+
+
     } catch (error) {
       console.error('データ読み込みエラー:', error);
     } finally {
@@ -251,33 +283,61 @@ const CustomTooltip = ({ active, payload, label }: any) => {
       aggregated[key].totalVolume += volume;
       aggregated[key].details.push({ load: record.load, reps: record.reps, sets: record.sets });
     });
-    return Object.values(aggregated).sort((a, b) => b.date.localeCompare(a.date));
+    return Object.values(aggregated).sort((a, b) => toIso(b.date).localeCompare(toIso(a.date)));
+
   };
 
-  const getGraphDataForExercise = (exercise: string) => {
-    const map: Record<string, { date: string; volume: number; maxLoad: number }> = {};
-    rawRecords.filter(r => r.exercise === exercise).forEach(r => {
-      if (!map[r.date]) map[r.date] = { date: r.date, volume: 0, maxLoad: 0 };
-      const vol = calculateVolume(r);
-      map[r.date].volume += vol;
-      if (r.load > map[r.date].maxLoad) map[r.date].maxLoad = r.load;
-    });
-    return Object.values(map).sort((a, b) => a.date.localeCompare(b.date));
-  };
+const getGraphDataForExercise = (exercise: string) => {
+  return volumeData
+    .filter(v => v.exercise === exercise)
+    .map(v => ({
+      date: v.date,        // すでに ISO
+      volume: v.volume,
+      maxLoad: Math.max(
+        ...rawRecords
+          .filter(r => r.exercise === exercise && toIso(r.date) === v.date)
+          .map(r => r.load),
+        0
+      )
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+};
 
-  const getExerciseStats = () => {
-    const stats: Record<string, { exercise: string; lastDate: string; maxDailyVolume: number; maxWeight: number; workoutDays: number }> = {};
-    rawRecords.forEach(r => {
-      const key = r.exercise;
-      const volume = calculateVolume(r);
-      if (!stats[key]) stats[key] = { exercise: key, lastDate: r.date, maxDailyVolume: 0, maxWeight: 0, workoutDays: 0 };
-      if (r.date > stats[key].lastDate) stats[key].lastDate = r.date;
-      if (volume > stats[key].maxDailyVolume) stats[key].maxDailyVolume = volume;
-      if (r.load > stats[key].maxWeight) stats[key].maxWeight = r.load;
-    });
-    Object.keys(stats).forEach(ex => (stats[ex].workoutDays = new Set(rawRecords.filter(r => r.exercise === ex).map(r => r.date)).size));
-    return Object.values(stats).sort((a, b) => a.exercise.localeCompare(b.exercise));
-  };
+
+const getExerciseStats = () => {
+  // volumeData は既に ISO 日付に統一されている想定
+  const grouped = volumeData.reduce((acc, cur) => {
+    if (!acc[cur.exercise]) acc[cur.exercise] = [];
+    acc[cur.exercise].push(cur);
+    return acc;
+  }, {} as Record<string, VolumeData[]>);
+
+  return Object.entries(grouped).map(([exercise, data]) => {
+    // 最終日＝ISO文字列で最大値
+    const lastDateIso = data.reduce((max, d) => (d.date > max ? d.date : max), '0000-00-00');
+
+    // 1日最高総挙上重量（volumeData から）
+    const maxDailyVolume = Math.max(...data.map(d => d.volume));
+
+    // 最高重量（rawRecords から）
+    const maxWeight = Math.max(
+      ...rawRecords.filter(r => r.exercise === exercise).map(r => r.load),
+      0
+    );
+
+    // 実施日数（重複日付を除外）
+    const workoutDays = new Set(data.map(d => d.date)).size;
+
+    return {
+      exercise,
+      lastDate: lastDateIso,
+      maxDailyVolume,
+      maxWeight,
+      workoutDays
+    };
+  }).sort((a, b) => a.exercise.localeCompare(b.exercise));
+};
+
 
   // ====== UI部分 =======
   return (
@@ -396,39 +456,110 @@ const CustomTooltip = ({ active, payload, label }: any) => {
               })()}
             </div>
 
-            {/* ✅ セット入力欄 */}
+            {/* ✅ スマホ対応：＋／−ボタン付きセット入力欄 */}
             {formData.details.map((d, i) => (
-              <div key={i} className="flex gap-2 items-center">
-                <input
-                  type="number"
-                  value={d.load}
-                  onChange={e => updateDetail(i, 'load', e.target.value)}
-                  placeholder="重量(lb)"
-                  className="border rounded-lg p-2 w-1/3"
-                />
-                <input
-                  type="number"
-                  value={d.reps}
-                  onChange={e => updateDetail(i, 'reps', e.target.value)}
-                  placeholder="回数"
-                  className="border rounded-lg p-2 w-1/3"
-                />
-                <input
-                  type="number"
-                  value={d.sets}
-                  step="1"
-                  min="1"
-                  onChange={e => updateDetail(i, 'sets', e.target.value)}
-                  placeholder="セット"
-                  className="border rounded-lg p-2 w-1/3"
-                />
+              <div key={i} className="flex flex-col sm:flex-row gap-3 items-center bg-gray-50 p-3 rounded-lg">
+                
+                {/* 重量 */}
+                <div className="flex items-center gap-2 w-full sm:w-1/3">
+                  <label className="text-sm text-gray-600 whitespace-nowrap">重量(lb)</label>
+                  <div className="flex items-center border rounded-lg w-full bg-white">
+                    <button
+                      type="button"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      onClick={() => updateDetail(i, 'load', String(Math.max(0, (parseFloat(d.load) || 0) - 5)))}
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={d.load}
+                      onChange={(e) => updateDetail(i, 'load', e.target.value)}
+                      className="w-full text-center outline-none py-1"
+                      step="5"
+                    />
+                    <button
+                      type="button"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      onClick={() => updateDetail(i, 'load', String((parseFloat(d.load) || 0) + 5))}
+                    >
+                      ＋
+                    </button>
+                  </div>
+                </div>
+
+                {/* 回数 */}
+                <div className="flex items-center gap-2 w-full sm:w-1/3">
+                  <label className="text-sm text-gray-600 whitespace-nowrap">回数</label>
+                  <div className="flex items-center border rounded-lg w-full bg-white">
+                    <button
+                      type="button"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      onClick={() => updateDetail(i, 'reps', String(Math.max(0, (parseInt(d.reps) || 0) - 1)))}
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      value={d.reps}
+                      onChange={(e) => updateDetail(i, 'reps', e.target.value)}
+                      className="w-full text-center outline-none py-1"
+                      step="1"
+                    />
+                    <button
+                      type="button"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      onClick={() => updateDetail(i, 'reps', String((parseInt(d.reps) || 0) + 1))}
+                    >
+                      ＋
+                    </button>
+                  </div>
+                </div>
+
+                {/* セット数 */}
+                <div className="flex items-center gap-2 w-full sm:w-1/3">
+                  <label className="text-sm text-gray-600 whitespace-nowrap">セット</label>
+                  <div className="flex items-center border rounded-lg w-full bg-white">
+                    <button
+                      type="button"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      onClick={() => updateDetail(i, 'sets', String(Math.max(1, (parseInt(d.sets) || 1) - 1)))}
+                    >
+                      −
+                    </button>
+                    <select
+                      value={d.sets || '1'}
+                      onChange={(e) => updateDetail(i, 'sets', e.target.value)}
+                      className="w-full text-center outline-none py-1 bg-transparent"
+                    >
+                      {[...Array(10)].map((_, n) => (
+                        <option key={n + 1} value={n + 1}>{n + 1}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      onClick={() => updateDetail(i, 'sets', String(Math.min(10, (parseInt(d.sets) || 1) + 1)))}
+                    >
+                      ＋
+                    </button>
+                  </div>
+                </div>
+
+                {/* セット削除 */}
                 {formData.details.length > 1 && (
-                  <button onClick={() => removeDetail(i)} className="text-red-600">
-                    <Minus />
+                  <button
+                    onClick={() => removeDetail(i)}
+                    className="text-red-600 hover:bg-red-100 rounded-full p-2 mt-2 sm:mt-0"
+                  >
+                    <Minus size={16} />
                   </button>
                 )}
               </div>
             ))}
+
 
             {/* ✅ リアルタイム総挙上重量表示 */}
             {formData.exercise && (
@@ -605,13 +736,19 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           <h2 className="text-xl font-bold mb-4">総挙上重量</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border">
-              <thead className="bg-gray-100"><tr><th>日付</th><th>種目</th><th>総挙上重量(lb)</th></tr></thead>
+              <thead className="bg-gray-100">
+                <tr><th>日付</th><th>種目</th><th>総挙上重量(lb)</th></tr>
+              </thead>
               <tbody>
-                {getAggregatedVolumeData().map((v, i) => (
-                  <tr key={i} className="border-b">
-                    <td>{v.date}</td><td>{v.exercise}</td><td>{v.totalVolume.toFixed(1)}</td>
-                  </tr>
-                ))}
+                {volumeData
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .map((v, i) => (
+                    <tr key={i} className="border-b">
+                      <td>{v.date}</td>
+                      <td>{v.exercise}</td>
+                      <td>{v.volume.toFixed(1)}</td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
