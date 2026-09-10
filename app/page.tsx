@@ -1,9 +1,11 @@
 'use client'
 
-import React, { useState, useEffect } from 'react';
-import { Plus, Calendar, TrendingUp, Dumbbell, Download, BarChart3, RefreshCw, Upload, Edit, Trash2, Save, X, Minus } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Plus, Calendar, TrendingUp, Dumbbell, BarChart3, RefreshCw, Minus, ClipboardList } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { supabase } from '@/lib/supabase';
+import RecommendationPanel from '@/components/RecommendationPanel';
+import { EXERCISE_RULES } from '@/lib/workout-rules';
 
 // === 型定義 ==============================
 type RawRecord = {
@@ -15,6 +17,7 @@ type RawRecord = {
   reps: number;
   sets: number;
   comment: string;
+  recommendationMode: 'normal' | 'light';
 };
 
 type VolumeData = {
@@ -37,6 +40,7 @@ type FormData = {
   exercise: string;
   comment: string;
   details: SetForm[];
+  affectsRecommendation: boolean;
 };
 
 type EditFormData = {
@@ -47,26 +51,92 @@ type EditFormData = {
   reps: string;
   sets: string;
   comment: string;
+  affectsRecommendation: boolean;
+};
+
+type DbRawRecord = {
+  id: string | number;
+  date: string;
+  weight: number;
+  exercise: string;
+  load: number;
+  reps: number;
+  sets: number;
+  comment: string | null;
+  affects_recommendation?: boolean | null;
+};
+
+type ChartTooltipProps = {
+  active?: boolean;
+  payload?: Array<{ value?: number }>;
+  label?: string;
 };
 // ========================================
+
+const KG_TO_LB = 2.20462;
+const LIGHT_SESSION_MARKER = '[[light-session]]';
+
+const hasLightSessionMarker = (comment: string | null | undefined): boolean =>
+  Boolean(comment?.startsWith(LIGHT_SESSION_MARKER));
+
+const visibleComment = (comment: string | null | undefined): string =>
+  hasLightSessionMarker(comment)
+    ? (comment ?? '').slice(LIGHT_SESSION_MARKER.length).replace(/^\s+/, '')
+    : comment || '';
+
+const storedComment = (comment: string, affectsRecommendation: boolean): string =>
+  affectsRecommendation ? comment : `${LIGHT_SESSION_MARKER}${comment ? ` ${comment}` : ''}`;
+
+const toIso = (date: string): string => {
+  const normalized = date.replace(/\./g, '-').replace(/\//g, '-').trim();
+  const match = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (!match) return normalized;
+  const [, year, month, day] = match;
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+};
+
+const calculateVolume = (record: RawRecord): number => {
+  const { weight, exercise, load, reps, sets } = record;
+  const weightLb = weight * KG_TO_LB;
+  if (exercise === '懸垂') return (weightLb + load) * reps * sets;
+  if (exercise.includes('アブローラー(膝コロ)')) return weightLb * reps * sets * 0.6;
+  if (exercise.includes('アブローラー(立ちコロ)')) return weightLb * reps * sets * 0.9;
+  if (exercise === 'ブルガリアンスクワット(左右)') return load * reps * sets * 4;
+  if (exercise.includes('(左右)')) return load * reps * sets * 2;
+  return load * reps * sets * 2;
+};
+
+const aggregateVolumeData = (records: RawRecord[]): VolumeData[] => {
+  const aggregated: Record<string, VolumeData> = {};
+  records.forEach(record => {
+    const date = toIso(record.date);
+    const key = `${date}_${record.exercise}`;
+    if (!aggregated[key]) {
+      aggregated[key] = { id: key, date, weight: record.weight, exercise: record.exercise, volume: 0 };
+    }
+    aggregated[key].volume += calculateVolume(record);
+  });
+  return Object.values(aggregated);
+};
 
 const WorkoutTracker = () => {
   // === カスタムツールチップ ===
   
 
   const [rawRecords, setRawRecords] = useState<RawRecord[]>([]);
-  const [volumeData, setVolumeData] = useState<VolumeData[]>([]);
   const [formData, setFormData] = useState<FormData>({
     date: '',
     weight: '',
     exercise: '',
     comment: '',
-    details: [{ load: '', reps: '', sets: '' }]
+    details: [{ load: '', reps: '', sets: '1' }],
+    affectsRecommendation: true
   });
-  const [view, setView] = useState<'input' | 'raw' | 'volume' | 'graph' | 'stats' | 'import'>('input');
+  const [view, setView] = useState<'input' | 'menu' | 'raw' | 'volume' | 'graph' | 'stats'>('input');
   const [selectedExerciseForGraph, setSelectedExerciseForGraph] = useState<string>('');
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [isCustomExercise, setIsCustomExercise] = useState(false);
+  const [supportsRecommendationColumn, setSupportsRecommendationColumn] = useState(false);
   const [editingId, setEditingId] = useState<string | number | null>(null);
   const [editFormData, setEditFormData] = useState<EditFormData>({
     date: '',
@@ -75,17 +145,18 @@ const WorkoutTracker = () => {
     load: '',
     reps: '',
     sets: '',
-    comment: ''
+    comment: '',
+    affectsRecommendation: true
   });
-const CustomTooltip = ({ active, payload, label }: any) => {
+  const volumeData = useMemo(() => aggregateVolumeData(rawRecords), [rawRecords]);
+
+const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
     if (active && payload && payload.length) {
       const date = label;
       const records = rawRecords.filter(
         (r) => r.date === date && r.exercise === selectedExerciseForGraph
       );
-      const details = records.map(
-        (r, i) => `${r.load}lb × ${r.reps}回 × ${r.sets}セット`
-      );
+      const details = records.map((r) => `${r.load}lb × ${r.reps}回 × ${r.sets}セット`);
 
       return (
         <div className="bg-white border p-2 rounded shadow text-sm">
@@ -105,21 +176,10 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     }
     return null;
   };
-  const KG_TO_LB = 2.20462;
-
-    // 日付を YYYY-MM-DD に正規化（比較・ソート用）
-    const toIso = (d: string): string => {
-      const s = d.replace(/\./g, '-').replace(/\//g, '-').trim();
-      const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-      if (!m) return s; // 期待外フォーマットはそのまま返す（最悪でも元文字列）
-      const [, y, mo, da] = m;
-      return `${y}-${mo.padStart(2, '0')}-${da.padStart(2, '0')}`;
-    };
-
   // Supabaseからデータを読み込む
-  const loadData = async (): Promise<void> => {
+  const loadData = useCallback(async (): Promise<void> => {
     try {
-      setLoading(true);
+      setIsRefreshing(true);
       const { data: rawData, error: rawError } = await supabase
         .from('workout_raw_records')
         .select('*')
@@ -127,7 +187,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
       if (rawError) throw rawError;
 
-      const formattedRawData: RawRecord[] = (rawData ?? []).map((record: any) => ({
+      const formattedRawData: RawRecord[] = (rawData as DbRawRecord[] | null ?? []).map(record => ({
         id: record.id,
         date: record.date,
         weight: record.weight,
@@ -135,68 +195,36 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         load: record.load,
         reps: record.reps,
         sets: record.sets,
-        comment: record.comment || ''
+        comment: visibleComment(record.comment),
+        recommendationMode: record.affects_recommendation === false || hasLightSessionMarker(record.comment) ? 'light' : 'normal'
       }));
       setRawRecords(formattedRawData);
 
-      const { data: volumeDataFromDB, error: volumeError } = await supabase
-        .from('workout_volume_data')
-        .select('*')
-        .order('created_at', { ascending: true });
-
-      if (volumeError) throw volumeError;
-
-      const formattedVolumeData: VolumeData[] = (volumeDataFromDB ?? []).map((record: any) => ({
-        id: record.id,
-        date: record.workout_date,
-        weight: 0,
-        exercise: record.exercise_name,
-        volume: record.total_volume
-      }));
-      setVolumeData(formattedVolumeData);
-      // 🔽 生データから統一された総挙上重量テーブルを再構築（ISO日付でキー＆表示）
-      const aggregated: Record<string, VolumeData> = {};
-
-      formattedRawData.forEach((r) => {
-        const isoDate = toIso(r.date);
-        const key = `${isoDate}_${r.exercise}`;
-        const vol = calculateVolume(r);
-        if (!aggregated[key]) {
-          aggregated[key] = {
-            id: key,
-            date: isoDate,       // 以後は ISO で統一
-            weight: r.weight,
-            exercise: r.exercise,
-            volume: 0
-          };
-        }
-        aggregated[key].volume += vol;
-      });
-
-      // DB由来の volumeData ではなく、生データ集計で上書き
-      setVolumeData(Object.values(aggregated));
-
-
+      const { error: recommendationColumnError } = await supabase
+        .from('workout_raw_records')
+        .select('id, affects_recommendation')
+        .limit(1);
+      setSupportsRecommendationColumn(!recommendationColumnError);
     } catch (error) {
       console.error('データ読み込みエラー:', error);
     } finally {
-      setLoading(false);
+      setIsRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
     const now = new Date();
     const formatted = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
     setFormData(prev => ({ ...prev, date: formatted }));
-  }, []);
+  }, [loadData]);
 
   const getUniqueExercises = (): string[] => Array.from(new Set(rawRecords.map(r => r.exercise))).sort();
 
   const addDetail = (): void => {
     setFormData(prev => ({
       ...prev,
-      details: [...prev.details, { load: '', reps: '', sets: '' }]
+      details: [...prev.details, { load: '', reps: '', sets: '1' }]
     }));
   };
 
@@ -216,17 +244,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     }));
   };
 
-  const calculateVolume = (record: RawRecord): number => {
-    const { weight, exercise, load, reps, sets } = record;
-    const weightLb = weight * KG_TO_LB;
-    if (exercise === '懸垂') return (weightLb + load) * reps * sets;
-    if (exercise.includes('アブローラー(膝コロ)')) return weightLb * reps * sets * 0.6;
-    if (exercise.includes('アブローラー(立ちコロ)')) return weightLb * reps * sets * 0.9;
-    if (exercise === 'ブルガリアンスクワット(左右)') return load * reps * sets * 4;
-    if (exercise.includes('(左右)')) return load * reps * sets * 2;
-    return load * reps * sets * 2;
-  };
-
   const handleSubmit = async (): Promise<void> => {
     if (!formData.date || !formData.exercise || formData.details.some(d => !d.load || !d.reps || !d.sets)) {
       alert('すべての項目を入力してください');
@@ -234,20 +251,27 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     }
 
     try {
-      const records: Omit<RawRecord, 'id'>[] = formData.details.map(detail => ({
-        date: formData.date.replace(/\//g, '-'),
-        weight: parseFloat(formData.weight) || 60,
-        exercise: formData.exercise,
-        load: parseFloat(detail.load),
-        reps: parseInt(detail.reps),
-        sets: parseInt(detail.sets),
-        comment: formData.comment
-      }));
+      const records = formData.details.map(detail => {
+        const record = {
+          date: formData.date.replace(/\//g, '-'),
+          weight: parseFloat(formData.weight) || 60,
+          exercise: formData.exercise,
+          load: parseFloat(detail.load),
+          reps: parseInt(detail.reps),
+          sets: parseInt(detail.sets),
+          comment: supportsRecommendationColumn
+            ? formData.comment
+            : storedComment(formData.comment, formData.affectsRecommendation),
+        };
+        return supportsRecommendationColumn
+          ? { ...record, affects_recommendation: formData.affectsRecommendation }
+          : record;
+      });
 
       const { data, error } = await supabase.from('workout_raw_records').insert(records).select();
       if (error) throw error;
 
-      const addedRecords: RawRecord[] = (data ?? []).map((r: any) => ({
+      const addedRecords: RawRecord[] = (data as DbRawRecord[] | null ?? []).map(r => ({
         id: r.id,
         date: r.date,
         weight: r.weight,
@@ -255,7 +279,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         load: r.load,
         reps: r.reps,
         sets: r.sets,
-        comment: r.comment
+        comment: visibleComment(r.comment),
+        recommendationMode: r.affects_recommendation === false || hasLightSessionMarker(r.comment) ? 'light' : 'normal'
       }));
 
       setRawRecords(prev => [...prev, ...addedRecords]);
@@ -264,27 +289,16 @@ const CustomTooltip = ({ active, payload, label }: any) => {
         weight: formData.weight,
         exercise: '',
         comment: '',
-        details: [{ load: '', reps: '', sets: '' }]
+        details: [{ load: '', reps: '', sets: '1' }],
+        affectsRecommendation: true
       });
+      setIsCustomExercise(false);
 
       alert(`${records.length}件のセットを追加しました！`);
     } catch (error) {
       console.error('記録追加エラー:', error);
       alert('記録の追加に失敗しました');
     }
-  };
-
-  const getAggregatedVolumeData = (): { date: string; exercise: string; totalVolume: number; details: any[] }[] => {
-    const aggregated: Record<string, { date: string; exercise: string; totalVolume: number; details: any[] }> = {};
-    rawRecords.forEach(record => {
-      const key = `${record.date}_${record.exercise}`;
-      if (!aggregated[key]) aggregated[key] = { date: record.date, exercise: record.exercise, totalVolume: 0, details: [] };
-      const volume = calculateVolume(record);
-      aggregated[key].totalVolume += volume;
-      aggregated[key].details.push({ load: record.load, reps: record.reps, sets: record.sets });
-    });
-    return Object.values(aggregated).sort((a, b) => toIso(b.date).localeCompare(toIso(a.date)));
-
   };
 
 const getGraphDataForExercise = (exercise: string) => {
@@ -359,16 +373,17 @@ const getExerciseStats = () => {
 
       {/* タブ切替 */}
       <div className="flex gap-2 mb-6 flex-wrap">
-        {[
+        {([
           { key: 'input', icon: <Plus size={18} />, label: '記録入力' },
+          { key: 'menu', icon: <ClipboardList size={18} />, label: '次回メニュー' },
           { key: 'raw', icon: <Calendar size={18} />, label: '生データ' },
           { key: 'volume', icon: <TrendingUp size={18} />, label: '総挙上重量' },
           { key: 'graph', icon: <BarChart3 size={18} />, label: 'グラフ' },
           { key: 'stats', icon: <Dumbbell size={18} />, label: '統計' }
-        ].map(tab => (
+        ] as const).map(tab => (
           <button
             key={tab.key}
-            onClick={() => setView(tab.key as any)}
+            onClick={() => setView(tab.key)}
             className={`px-6 py-2 rounded-lg font-medium ${
               view === tab.key ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
             }`}
@@ -409,22 +424,24 @@ const getExerciseStats = () => {
                 onChange={e => {
                   const val = e.target.value;
                   if (val === 'custom') {
+                    setIsCustomExercise(true);
                     setFormData({ ...formData, exercise: '' });
                   } else {
+                    setIsCustomExercise(false);
                     setFormData({ ...formData, exercise: val });
                   }
                 }}
                 className="border rounded-lg p-2 w-full"
               >
                 <option value="">種目を選択</option>
-                {getUniqueExercises().map((ex, i) => (
+                {Array.from(new Set([...EXERCISE_RULES.map(rule => rule.exercise), ...getUniqueExercises()])).map((ex, i) => (
                   <option key={i} value={ex}>{ex}</option>
                 ))}
                 <option value="custom">＋ 新しく記入する</option>
               </select>
 
               {/* 新規種目記入欄 */}
-              {formData.exercise === '' && (
+              {isCustomExercise && (
                 <input
                   type="text"
                   placeholder="種目名を入力"
@@ -573,7 +590,8 @@ const getExerciseStats = () => {
                     load: parseFloat(d.load) || 0,
                     reps: parseInt(d.reps) || 0,
                     sets: parseInt(d.sets) || 0,
-                    comment: ''
+                    comment: '',
+                    recommendationMode: formData.affectsRecommendation ? 'normal' : 'light'
                   }));
                   const totalVolume = tempRecords.reduce((sum, r) => sum + calculateVolume(r), 0);
                   return <p>💪 この記録の総挙上重量: <span className="font-semibold">{totalVolume.toFixed(1)} lb</span></p>;
@@ -596,6 +614,23 @@ const getExerciseStats = () => {
               className="border rounded-lg p-2 w-full"
             />
 
+            <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${
+              formData.affectsRecommendation ? 'border-slate-200 bg-white' : 'border-amber-300 bg-amber-50'
+            }`}>
+              <input
+                type="checkbox"
+                checked={!formData.affectsRecommendation}
+                onChange={e => setFormData({ ...formData, affectsRecommendation: !e.target.checked })}
+                className="mt-1 h-4 w-4"
+              />
+              <span>
+                <span className="block font-medium text-slate-900">今日は軽く動くだけ</span>
+                <span className="mt-1 block text-sm leading-5 text-slate-600">
+                  総挙上重量には含めますが、次回メニューの重量・回数判定には反映しません。
+                </span>
+              </span>
+            </label>
+
             <button
               onClick={handleSubmit}
               className="bg-blue-600 text-white w-full py-3 rounded-lg hover:bg-blue-700"
@@ -604,6 +639,16 @@ const getExerciseStats = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {view === 'menu' && (
+        <RecommendationPanel
+          records={rawRecords}
+          asOf={(() => {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+          })()}
+        />
       )}
 
 
@@ -622,6 +667,7 @@ const getExerciseStats = () => {
                     <th>重量</th>
                     <th>回数</th>
                     <th>セット</th>
+                    <th>提案への反映</th>
                     <th>コメント</th>
                     <th>操作</th>
                   </tr>
@@ -637,21 +683,27 @@ const getExerciseStats = () => {
                           <td><input value={editFormData.load} onChange={e => setEditFormData({...editFormData, load: e.target.value})} className="border rounded p-1 w-full"/></td>
                           <td><input value={editFormData.reps} onChange={e => setEditFormData({...editFormData, reps: e.target.value})} className="border rounded p-1 w-full"/></td>
                           <td><input value={editFormData.sets} onChange={e => setEditFormData({...editFormData, sets: e.target.value})} className="border rounded p-1 w-full"/></td>
+                          <td className="text-center"><input type="checkbox" checked={editFormData.affectsRecommendation} onChange={e => setEditFormData({...editFormData, affectsRecommendation: e.target.checked})}/></td>
                           <td><input value={editFormData.comment} onChange={e => setEditFormData({...editFormData, comment: e.target.value})} className="border rounded p-1 w-full"/></td>
                           <td className="flex gap-1">
                             <button
                               onClick={async () => {
+                                const updateRecord = {
+                                  date: editFormData.date,
+                                  weight: parseFloat(editFormData.weight),
+                                  exercise: editFormData.exercise,
+                                  load: parseFloat(editFormData.load),
+                                  reps: parseInt(editFormData.reps),
+                                  sets: parseInt(editFormData.sets),
+                                  comment: supportsRecommendationColumn
+                                    ? editFormData.comment
+                                    : storedComment(editFormData.comment, editFormData.affectsRecommendation),
+                                };
                                 const { error } = await supabase
                                   .from('workout_raw_records')
-                                  .update({
-                                    date: editFormData.date,
-                                    weight: parseFloat(editFormData.weight),
-                                    exercise: editFormData.exercise,
-                                    load: parseFloat(editFormData.load),
-                                    reps: parseInt(editFormData.reps),
-                                    sets: parseInt(editFormData.sets),
-                                    comment: editFormData.comment
-                                  })
+                                  .update(supportsRecommendationColumn
+                                    ? { ...updateRecord, affects_recommendation: editFormData.affectsRecommendation }
+                                    : updateRecord)
                                   .eq('id', record.id);
                                 if (!error) {
                                   alert('更新しました');
@@ -681,6 +733,7 @@ const getExerciseStats = () => {
                           <td>{record.load}</td>
                           <td>{record.reps}</td>
                           <td>{record.sets}</td>
+                          <td>{record.recommendationMode === 'light' ? '軽い日' : '通常'}</td>
                           <td>{record.comment}</td>
                           <td className="flex gap-1">
                             <button
@@ -693,7 +746,8 @@ const getExerciseStats = () => {
                                   load: record.load.toString(),
                                   reps: record.reps.toString(),
                                   sets: record.sets.toString(),
-                                  comment: record.comment
+                                  comment: record.comment,
+                                  affectsRecommendation: record.recommendationMode !== 'light'
                                 });
                               }}
                               className="bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
