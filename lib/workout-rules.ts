@@ -26,12 +26,14 @@ const rule = (
 export const EXERCISE_RULES: readonly ExerciseRule[] = [
   rule('ダンベルチェストプレス', [8, 12], 3),
   rule('ダンベルショルダープレス', [8, 12], 3),
+  rule('サイドレイズ', [12, 20], 3, 'dumbbell', false, 2, 120),
   rule('インクラインサイドレイズ(左右)', [12, 20], 3, 'dumbbell', true, 2, 120),
   rule('懸垂', [6, 10], 3, 'pullup', false, 1),
   rule('ワンハンドローイング(左右)', [8, 12], 3, 'dumbbell', true),
   rule('ダンベルデッドリフト', [6, 8], 2),
   rule('ブルガリアンスクワット(左右)', [8, 12], 2, 'dumbbell', true, 4),
   rule('アブローラー(膝コロ)', [8, 15], 2, 'ab-wheel', false, 0.6, 120),
+  rule('アブローラー(立ちコロ)', [5, 10], 2, 'ab-wheel', false, 0.9, 180),
 ];
 
 // User's formula: 10x, 10x - 2.5, 10x - 5; integer 1 < x < 9.

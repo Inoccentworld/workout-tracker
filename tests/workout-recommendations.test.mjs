@@ -16,8 +16,10 @@ test('the configured equipment list follows the user formula', () => {
   assert.deepEqual(DUMBBELL_LOADS_LB.slice(0, 6), [15, 17.5, 20, 25, 27.5, 30]);
   assert.equal(DUMBBELL_LOADS_LB.at(-1), 80);
   assert.equal(DUMBBELL_LOADS_LB.includes(22.5), false);
-  assert.equal(EXERCISE_RULES.length, 8);
+  assert.equal(EXERCISE_RULES.length, 10);
   assert.equal(EXERCISE_RULES.find(r => r.exercise === 'ダンベルデッドリフト').reps[1], 8);
+  assert.deepEqual(EXERCISE_RULES.find(r => r.exercise === 'サイドレイズ').reps, [12, 20]);
+  assert.deepEqual(EXERCISE_RULES.find(r => r.exercise === 'アブローラー(立ちコロ)').reps, [5, 10]);
 });
 
 test('normal records are treated as near-limit work without requiring RIR input', () => {
