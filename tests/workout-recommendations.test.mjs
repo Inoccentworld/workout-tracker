@@ -135,10 +135,12 @@ test('pull-up uses recorded body weight and needs an explicit added-load list', 
 test('ab wheel requires a difficulty review instead of inventing a weight', () => {
   const exercise = 'アブローラー(膝コロ)';
   const rows = [
-    record('2026-09-04', { exercise, load: 0, reps: 15, sets: 2 }),
-    record('2026-09-08', { id: 'second', exercise, load: 0, reps: 15, sets: 2 }),
+    record('2026-09-04', { exercise, load: 20, reps: 15, sets: 2 }),
+    record('2026-09-08', { id: 'second', exercise, load: 20, reps: 15, sets: 2 }),
   ];
-  assert.equal(recommend(rows, {}, exercise).status, 'review-difficulty');
+  const result = recommend(rows, {}, exercise);
+  assert.equal(result.status, 'review-difficulty');
+  assert.equal(result.plan[0].loadLb, 0);
 });
 
 test('calendar summaries normalize separators and exclude future records', () => {

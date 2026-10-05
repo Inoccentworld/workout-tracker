@@ -171,7 +171,14 @@ export function recommendWorkout(
     }
     seen.add(r.id);
     if (timeOf(date) > end) { issues.push(`記録 ${r.id}: 基準日より後のため除外しました。`); continue; }
-    if (!r.warmup) rows.push({ ...r, date, recommendationMode: r.recommendationMode ?? 'normal' });
+    if (!r.warmup) rows.push({
+      ...r,
+      date,
+      // Ab-wheel progression is based on variation and repetitions. Added
+      // weight is deliberately ignored unless a separate weighted rule is added.
+      load: rule?.equipment === 'ab-wheel' ? 0 : r.load,
+      recommendationMode: r.recommendationMode ?? 'normal',
+    });
   }
 
   const progressionRows = rows.filter(r => r.recommendationMode !== 'light');

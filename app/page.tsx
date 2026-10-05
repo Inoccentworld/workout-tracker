@@ -149,6 +149,7 @@ const WorkoutTracker = () => {
     affectsRecommendation: true
   });
   const volumeData = useMemo(() => aggregateVolumeData(rawRecords), [rawRecords]);
+  const isAbWheelExercise = EXERCISE_RULES.find(rule => rule.exercise === formData.exercise)?.equipment === 'ab-wheel';
 
 const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
     if (active && payload && payload.length) {
@@ -224,7 +225,7 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
   const addDetail = (): void => {
     setFormData(prev => ({
       ...prev,
-      details: [...prev.details, { load: '', reps: '', sets: '1' }]
+      details: [...prev.details, { load: isAbWheelExercise ? '0' : '', reps: '', sets: '1' }]
     }));
   };
 
@@ -428,7 +429,14 @@ const getExerciseStats = () => {
                     setFormData({ ...formData, exercise: '' });
                   } else {
                     setIsCustomExercise(false);
-                    setFormData({ ...formData, exercise: val });
+                    const isAbWheel = EXERCISE_RULES.find(rule => rule.exercise === val)?.equipment === 'ab-wheel';
+                    setFormData({
+                      ...formData,
+                      exercise: val,
+                      details: isAbWheel
+                        ? formData.details.map(detail => ({ ...detail, load: '0' }))
+                        : formData.details,
+                    });
                   }
                 }}
                 className="border rounded-lg p-2 w-full"
@@ -479,11 +487,14 @@ const getExerciseStats = () => {
                 
                 {/* 重量 */}
                 <div className="flex items-center gap-2 w-full sm:w-1/3">
-                  <label className="text-sm text-gray-600 whitespace-nowrap">重量(lb)</label>
+                  <label className="text-sm text-gray-600 whitespace-nowrap">
+                    {isAbWheelExercise ? '追加重量(lb)' : '重量(lb)'}
+                  </label>
                   <div className="flex items-center border rounded-lg w-full bg-white">
                     <button
                       type="button"
-                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      disabled={isAbWheelExercise}
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100 disabled:text-gray-300"
                       onClick={() => updateDetail(i, 'load', String(Math.max(0, (parseFloat(d.load) || 0) - 5)))}
                     >
                       −
@@ -493,12 +504,14 @@ const getExerciseStats = () => {
                       inputMode="numeric"
                       value={d.load}
                       onChange={(e) => updateDetail(i, 'load', e.target.value)}
+                      readOnly={isAbWheelExercise}
                       className="w-full text-center outline-none py-1"
                       step="5"
                     />
                     <button
                       type="button"
-                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      disabled={isAbWheelExercise}
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100 disabled:text-gray-300"
                       onClick={() => updateDetail(i, 'load', String((parseFloat(d.load) || 0) + 5))}
                     >
                       ＋

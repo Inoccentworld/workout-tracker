@@ -70,7 +70,10 @@ export default function RecommendationPanel({ records, asOf }: Props) {
                         {set.role === 'main' ? <ArrowUp size={17} /> : <Minus size={17} />}
                         <span className="text-sm text-slate-300">{set.role === 'main' ? 'メイン' : '軽め'}</span>
                       </div>
-                      <strong>{set.loadLb} lb × {set.reps[0]}〜{set.reps[1]}回 × {set.sets}セット</strong>
+                      <strong>
+                        {item.rule?.equipment === 'ab-wheel' ? '自重' : `${set.loadLb} lb`}
+                        {' × '}{set.reps[0]}〜{set.reps[1]}回 × {set.sets}セット
+                      </strong>
                     </div>
                   ))}
                 </div>
