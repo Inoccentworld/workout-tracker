@@ -129,7 +129,7 @@ const WorkoutTracker = () => {
     weight: '',
     exercise: '',
     comment: '',
-    details: [{ load: '', reps: '', sets: '1' }],
+    details: [{ load: '0', reps: '', sets: '1' }],
     affectsRecommendation: true
   });
   const [view, setView] = useState<'input' | 'menu' | 'raw' | 'volume' | 'graph' | 'stats'>('input');
@@ -225,7 +225,7 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
   const addDetail = (): void => {
     setFormData(prev => ({
       ...prev,
-      details: [...prev.details, { load: isAbWheelExercise ? '0' : '', reps: '', sets: '1' }]
+      details: [...prev.details, { load: '0', reps: '', sets: '1' }]
     }));
   };
 
@@ -290,7 +290,7 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
         weight: formData.weight,
         exercise: '',
         comment: '',
-        details: [{ load: '', reps: '', sets: '1' }],
+        details: [{ load: '0', reps: '', sets: '1' }],
         affectsRecommendation: true
       });
       setIsCustomExercise(false);
