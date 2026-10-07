@@ -11,18 +11,18 @@ type Props = {
 };
 
 const statusPresentation = {
-  baseline: ['基準を確認', 'bg-slate-100 text-slate-700'],
-  reassess: ['再開時に確認', 'bg-amber-100 text-amber-800'],
-  recovery: ['回復を優先', 'bg-rose-100 text-rose-800'],
-  repeat: ['重量を維持', 'bg-blue-100 text-blue-800'],
-  'increase-reps': ['回数を伸ばす', 'bg-cyan-100 text-cyan-800'],
-  'increase-load': ['重量アップ', 'bg-emerald-100 text-emerald-800'],
-  transition: ['段階的に増量', 'bg-violet-100 text-violet-800'],
-  'equipment-limit': ['器具の上限', 'bg-orange-100 text-orange-800'],
-  'review-difficulty': ['難度を確認', 'bg-violet-100 text-violet-800'],
-  'confirm-equipment': ['重量を確認', 'bg-amber-100 text-amber-800'],
-  unsupported: ['ルール未設定', 'bg-slate-100 text-slate-700'],
-  'invalid-history': ['記録を確認', 'bg-rose-100 text-rose-800'],
+  baseline: ['基準を確認', 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-100'],
+  reassess: ['再開時に確認', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'],
+  recovery: ['回復を優先', 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200'],
+  repeat: ['重量を維持', 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200'],
+  'increase-reps': ['回数を伸ばす', 'bg-cyan-100 text-cyan-800 dark:bg-cyan-950 dark:text-cyan-200'],
+  'increase-load': ['重量アップ', 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'],
+  transition: ['段階的に増量', 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200'],
+  'equipment-limit': ['器具の上限', 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200'],
+  'review-difficulty': ['難度を確認', 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200'],
+  'confirm-equipment': ['重量を確認', 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'],
+  unsupported: ['ルール未設定', 'bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-100'],
+  'invalid-history': ['記録を確認', 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200'],
 } as const;
 
 const formatVolume = (value: number | null) => value === null ? '—' : `${Math.round(value).toLocaleString()} lb`;
@@ -39,12 +39,12 @@ export default function RecommendationPanel({ records, asOf }: Props) {
 
   return (
     <div className="space-y-5">
-      <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
+      <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm dark:border-blue-900 dark:from-blue-950 dark:to-slate-900">
         <div className="flex items-start gap-3">
           <div className="rounded-xl bg-blue-600 p-2 text-white"><Dumbbell size={22} /></div>
           <div>
-            <h2 className="text-xl font-bold text-slate-900">次回メニュー</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-600">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">次回メニュー</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600 dark:text-slate-300">
               通常の記録は限界近くまで行った実績として評価します。回数は止める目標ではなく、増量判断の目安です。
               「軽く動くだけ」の記録は週間総量に含めますが、以下の提案は変更しません。
             </p>
@@ -56,9 +56,9 @@ export default function RecommendationPanel({ records, asOf }: Props) {
         {recommendations.map(item => {
           const [statusLabel, statusClass] = statusPresentation[item.status];
           return (
-            <article key={item.exercise} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <article key={item.exercise} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <h3 className="font-bold text-slate-900">{item.exercise}</h3>
+                <h3 className="font-bold text-slate-900 dark:text-slate-100">{item.exercise}</h3>
                 <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass}`}>{statusLabel}</span>
               </div>
 
@@ -78,25 +78,25 @@ export default function RecommendationPanel({ records, asOf }: Props) {
                   ))}
                 </div>
               ) : (
-                <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">再開時に重量を確認します</div>
+                <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">再開時に重量を確認します</div>
               )}
 
-              <p className="mt-3 text-sm leading-6 text-slate-700">{item.reasons.at(-1)}</p>
+              <p className="mt-3 text-sm leading-6 text-slate-700 dark:text-slate-200">{item.reasons.at(-1)}</p>
 
               <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-xl bg-slate-50 p-3">
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                   <TrendingUp className="mx-auto mb-1 text-blue-600" size={17} />
-                  <div className="text-xs text-slate-500">直近7日</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">直近7日</div>
                   <div className="mt-1 text-sm font-semibold">{formatVolume(item.recent7.volumeLb)}</div>
                 </div>
-                <div className="rounded-xl bg-slate-50 p-3">
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                   <Gauge className="mx-auto mb-1 text-violet-600" size={17} />
-                  <div className="text-xs text-slate-500">28日週平均</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">28日週平均</div>
                   <div className="mt-1 text-sm font-semibold">{formatVolume(item.weeklyAverageVolume28Lb)}</div>
                 </div>
-                <div className="rounded-xl bg-slate-50 p-3">
+                <div className="rounded-xl bg-slate-50 p-3 dark:bg-slate-800">
                   <CalendarClock className="mx-auto mb-1 text-amber-600" size={17} />
-                  <div className="text-xs text-slate-500">通常記録から</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">通常記録から</div>
                   <div className="mt-1 text-sm font-semibold">
                     {item.daysSinceLastProgression === null ? '記録なし' : `${item.daysSinceLastProgression}日`}
                   </div>
@@ -104,7 +104,7 @@ export default function RecommendationPanel({ records, asOf }: Props) {
               </div>
 
               {item.recent7.lightSessions > 0 && (
-                <p className="mt-3 text-xs text-slate-500">直近7日に、提案へ反映しない軽い日が{item.recent7.lightSessions}回あります。</p>
+                <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">直近7日に、提案へ反映しない軽い日が{item.recent7.lightSessions}回あります。</p>
               )}
             </article>
           );

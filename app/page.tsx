@@ -160,15 +160,15 @@ const CustomTooltip = ({ active, payload, label }: ChartTooltipProps) => {
       const details = records.map((r) => `${r.load}lb × ${r.reps}回 × ${r.sets}セット`);
 
       return (
-        <div className="bg-white border p-2 rounded shadow text-sm">
+        <div className="bg-white border p-2 rounded shadow text-sm dark:border-slate-700 dark:bg-slate-900">
           <p className="font-semibold">{date}</p>
           <p>総挙上重量: {payload[0]?.value?.toFixed?.(1)} lb</p>
           <p>最大負荷: {payload[1]?.value} lb</p>
           {details.length > 0 && (
             <div className="mt-1">
-              <p className="font-semibold text-gray-700">セット内訳:</p>
+              <p className="font-semibold text-gray-700 dark:text-slate-200">セット内訳:</p>
               {details.map((d, i) => (
-                <p key={i} className="text-gray-600">{d}</p>
+                <p key={i} className="text-gray-600 dark:text-slate-300">{d}</p>
               ))}
             </div>
           )}
@@ -356,12 +356,12 @@ const getExerciseStats = () => {
 
   // ====== UI部分 =======
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
+    <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen dark:bg-slate-950 dark:text-slate-100">
       {/* ヘッダー */}
-      <div className="bg-white rounded-lg shadow-lg p-6 mb-6 flex justify-between items-center">
+      <div className="bg-white rounded-lg shadow-lg p-6 mb-6 flex justify-between items-center dark:bg-slate-900">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2"><Dumbbell /> 筋トレ記録ツール</h1>
-          <p className="text-gray-600">生データ: {rawRecords.length}件 | 総挙上データ: {volumeData.length}件</p>
+          <p className="text-gray-600 dark:text-slate-300">生データ: {rawRecords.length}件 | 総挙上データ: {volumeData.length}件</p>
         </div>
         <button
           onClick={loadData}
@@ -386,7 +386,7 @@ const getExerciseStats = () => {
             key={tab.key}
             onClick={() => setView(tab.key)}
             className={`px-6 py-2 rounded-lg font-medium ${
-              view === tab.key ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'
+              view === tab.key ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
             }`}
           >
             {tab.icon} {tab.label}
@@ -396,7 +396,7 @@ const getExerciseStats = () => {
 
       {/* 記録入力 */}
       {view === 'input' && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6 dark:bg-slate-900">
           <h2 className="text-xl font-bold mb-4">新規記録（複数セット対応）</h2>
           <div className="space-y-4">
 
@@ -473,7 +473,7 @@ const getExerciseStats = () => {
                   )
                 );
                 return (
-                  <div className="mt-2 text-sm text-gray-700 bg-gray-50 p-2 rounded-lg border">
+                  <div className="mt-2 text-sm text-gray-700 bg-gray-50 p-2 rounded-lg border dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                     <p>🔹これまでの最高総挙上重量: <span className="font-semibold">{maxVolume.toFixed(1)} lb</span></p>
                     <p>🔹これまでの最高負荷(1セットあたり): <span className="font-semibold">{maxLoad} lb</span></p>
                   </div>
@@ -483,18 +483,18 @@ const getExerciseStats = () => {
 
             {/* ✅ スマホ対応：＋／−ボタン付きセット入力欄 */}
             {formData.details.map((d, i) => (
-              <div key={i} className="flex flex-col sm:flex-row gap-3 items-center bg-gray-50 p-3 rounded-lg">
+              <div key={i} className="flex flex-col sm:flex-row gap-3 items-center bg-gray-50 p-3 rounded-lg dark:bg-slate-800">
                 
                 {/* 重量 */}
                 <div className="flex items-center gap-2 w-full sm:w-1/3">
-                  <label className="text-sm text-gray-600 whitespace-nowrap">
+                  <label className="text-sm text-gray-600 whitespace-nowrap dark:text-slate-300">
                     {isAbWheelExercise ? '追加重量(lb)' : '重量(lb)'}
                   </label>
-                  <div className="flex items-center border rounded-lg w-full bg-white">
+                  <div className="flex items-center border rounded-lg w-full bg-white dark:border-slate-600 dark:bg-slate-900">
                     <button
                       type="button"
                       disabled={isAbWheelExercise}
-                      className="px-2 py-1 text-gray-600 hover:bg-gray-100 disabled:text-gray-300"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100 disabled:text-gray-300 dark:text-slate-300 dark:hover:bg-slate-700 dark:disabled:text-slate-600"
                       onClick={() => updateDetail(i, 'load', String(Math.max(0, (parseFloat(d.load) || 0) - 5)))}
                     >
                       −
@@ -511,7 +511,7 @@ const getExerciseStats = () => {
                     <button
                       type="button"
                       disabled={isAbWheelExercise}
-                      className="px-2 py-1 text-gray-600 hover:bg-gray-100 disabled:text-gray-300"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100 disabled:text-gray-300 dark:text-slate-300 dark:hover:bg-slate-700 dark:disabled:text-slate-600"
                       onClick={() => updateDetail(i, 'load', String((parseFloat(d.load) || 0) + 5))}
                     >
                       ＋
@@ -521,11 +521,11 @@ const getExerciseStats = () => {
 
                 {/* 回数 */}
                 <div className="flex items-center gap-2 w-full sm:w-1/3">
-                  <label className="text-sm text-gray-600 whitespace-nowrap">回数</label>
-                  <div className="flex items-center border rounded-lg w-full bg-white">
+                  <label className="text-sm text-gray-600 whitespace-nowrap dark:text-slate-300">回数</label>
+                  <div className="flex items-center border rounded-lg w-full bg-white dark:border-slate-600 dark:bg-slate-900">
                     <button
                       type="button"
-                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
                       onClick={() => updateDetail(i, 'reps', String(Math.max(0, (parseInt(d.reps) || 0) - 1)))}
                     >
                       −
@@ -540,7 +540,7 @@ const getExerciseStats = () => {
                     />
                     <button
                       type="button"
-                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
                       onClick={() => updateDetail(i, 'reps', String((parseInt(d.reps) || 0) + 1))}
                     >
                       ＋
@@ -550,11 +550,11 @@ const getExerciseStats = () => {
 
                 {/* セット数 */}
                 <div className="flex items-center gap-2 w-full sm:w-1/3">
-                  <label className="text-sm text-gray-600 whitespace-nowrap">セット</label>
-                  <div className="flex items-center border rounded-lg w-full bg-white">
+                  <label className="text-sm text-gray-600 whitespace-nowrap dark:text-slate-300">セット</label>
+                  <div className="flex items-center border rounded-lg w-full bg-white dark:border-slate-600 dark:bg-slate-900">
                     <button
                       type="button"
-                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
                       onClick={() => updateDetail(i, 'sets', String(Math.max(1, (parseInt(d.sets) || 1) - 1)))}
                     >
                       −
@@ -570,7 +570,7 @@ const getExerciseStats = () => {
                     </select>
                     <button
                       type="button"
-                      className="px-2 py-1 text-gray-600 hover:bg-gray-100"
+                      className="px-2 py-1 text-gray-600 hover:bg-gray-100 dark:text-slate-300 dark:hover:bg-slate-700"
                       onClick={() => updateDetail(i, 'sets', String(Math.min(10, (parseInt(d.sets) || 1) + 1)))}
                     >
                       ＋
@@ -593,7 +593,7 @@ const getExerciseStats = () => {
 
             {/* ✅ リアルタイム総挙上重量表示 */}
             {formData.exercise && (
-              <div className="text-sm bg-blue-50 border rounded-lg p-2">
+              <div className="text-sm bg-blue-50 border rounded-lg p-2 dark:border-blue-900 dark:bg-blue-950/50">
                 {(() => {
                   const tempRecords: RawRecord[] = formData.details.map((d, i) => ({
                     id: i,
@@ -628,7 +628,9 @@ const getExerciseStats = () => {
             />
 
             <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${
-              formData.affectsRecommendation ? 'border-slate-200 bg-white' : 'border-amber-300 bg-amber-50'
+              formData.affectsRecommendation
+                ? 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900'
+                : 'border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40'
             }`}>
               <input
                 type="checkbox"
@@ -637,8 +639,8 @@ const getExerciseStats = () => {
                 className="mt-1 h-4 w-4"
               />
               <span>
-                <span className="block font-medium text-slate-900">今日は軽く動くだけ</span>
-                <span className="mt-1 block text-sm leading-5 text-slate-600">
+                <span className="block font-medium text-slate-900 dark:text-slate-100">今日は軽く動くだけ</span>
+                <span className="mt-1 block text-sm leading-5 text-slate-600 dark:text-slate-300">
                   総挙上重量には含めますが、次回メニューの重量・回数判定には反映しません。
                 </span>
               </span>
@@ -668,11 +670,11 @@ const getExerciseStats = () => {
 
       {/* 生データ */}
         {view === 'raw' && (
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white rounded-lg shadow p-6 dark:bg-slate-900">
             <h2 className="text-xl font-bold mb-4">生データ（編集・削除対応）</h2>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border">
-                <thead className="bg-gray-100">
+                <thead className="bg-gray-100 dark:bg-slate-800">
                   <tr>
                     <th>日付</th>
                     <th>体重</th>
@@ -799,11 +801,11 @@ const getExerciseStats = () => {
 
       {/* 総挙上重量 */}
       {view === 'volume' && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6 dark:bg-slate-900">
           <h2 className="text-xl font-bold mb-4">総挙上重量</h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border">
-              <thead className="bg-gray-100">
+              <thead className="bg-gray-100 dark:bg-slate-800">
                 <tr><th>日付</th><th>種目</th><th>総挙上重量(lb)</th></tr>
               </thead>
               <tbody>
@@ -824,7 +826,7 @@ const getExerciseStats = () => {
 
       {/* グラフ */}
       {view === 'graph' && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6 dark:bg-slate-900">
           <h2 className="text-xl font-bold mb-4">推移グラフ</h2>
 
           {/* 種目選択 */}
@@ -883,7 +885,7 @@ const getExerciseStats = () => {
 
       {/* 統計 */}
       {view === 'stats' && (
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white rounded-lg shadow p-6 dark:bg-slate-900">
           <h2 className="text-xl font-bold mb-4">統計</h2>
           <div className="grid gap-3">
             {getExerciseStats().map((s, i) => (
